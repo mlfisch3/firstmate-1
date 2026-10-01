@@ -1469,9 +1469,15 @@ fm_backend_herdr_pane_idle_shell_sample() {  # <session> <pane-id>
 # the block read-only; they are never renamed or moved.
 #
 # This is presentation-only and always returns success.
-# Every unavailable, ambiguous, failed, or unverifiable ordering step prints a
-# warning and leaves the safely-created worker running in Herdr's current
-# order.
+# Every unavailable, unverifiable, or ambiguous ordering step prints a warning
+# and leaves the safely-created worker running in Herdr's current order. The
+# only shape input that gates the move is the owning parent itself: this
+# function moves the newly-created workspace adjacent to that parent's
+# contiguous child block whenever the parent is uniquely identified and the
+# new workspace sits at the end of the current list. Other home workspaces,
+# human-named workspaces, and detached projection children elsewhere in the
+# session do not step the move aside, because the move only repositions this
+# one new workspace while preserving every other workspace's relative order.
 # It never looks up a task endpoint, adopts or reuses a workspace, retries an
 # ambiguous move, or calls any close/delete/rename primitive.
 # The sole move target is <created-workspace-id>, captured directly from the
@@ -1495,17 +1501,13 @@ fm_backend_herdr_projection_order_best_effort() {  # <session> <created-workspac
       then .workspace_id == $parent_ws
       else (.label | type) == "string" and .label == $parent
       end;
-    def is_top_level_parent:
-      (.label | type) == "string"
-      and ((.label == "firstmate") or (.label | test("^2ndmate-[^/]+$")));
     def is_new_child:
       (.label | type) == "string"
       and (.label | test("^└ .+ · p:[A-Za-z0-9_-]{22}$"));
-    def is_legacy_child:
-      (.label | type) == "string"
-      and (.label | test("^(firstmate|2ndmate-[^/]+)/.+ · p:[A-Za-z0-9_-]{22}$"));
     def is_legacy_child_for($owner):
-      is_legacy_child and (.label | startswith($owner + "/"));
+      (.label | type) == "string"
+      and (.label | test("^(firstmate|2ndmate-[^/]+)/.+ · p:[A-Za-z0-9_-]{22}$"))
+      and (.label | startswith($owner + "/"));
     def is_child_for($owner):
       is_new_child or is_legacy_child_for($owner);
     (.result.workspaces // null) as $spaces
@@ -1527,27 +1529,6 @@ fm_backend_herdr_projection_order_best_effort() {  # <session> <created-workspac
           end
         )
       ) as $block
-    | (reduce range($pidx + 1 + $block; $current) as $i (
-        {valid: true, active_parent: null};
-        if .valid == false then .
-        elif ($spaces[$i] | is_top_level_parent) then
-          .active_parent = $spaces[$i].label
-        elif ($spaces[$i] | is_new_child) then
-          if .active_parent == null then .valid = false else . end
-        elif ($spaces[$i] | is_legacy_child) then
-          .active_parent as $owner
-          | if $owner == null then
-              .valid = false
-            elif (($spaces[$i] | is_legacy_child_for($owner)) | not) then
-              .valid = false
-            else
-              .
-            end
-        else
-          .active_parent = null
-        end
-      )) as $remainder
-    | select($remainder.valid == true)
     | {
         current: $current,
         desired: ($pidx + 1 + $block),
@@ -1556,7 +1537,7 @@ fm_backend_herdr_projection_order_best_effort() {  # <session> <created-workspac
       }
   ' 2>/dev/null) || analysis=
   [ -n "$analysis" ] || {
-    echo "warning: herdr presentation ordering found an ambiguous workspace layout; leaving worker in Herdr's current order" >&2
+    echo "warning: herdr presentation ordering could not resolve the owning parent exactly; leaving worker in Herdr's current order" >&2
     return 0
   }
   current=$(printf '%s' "$analysis" | jq -r '.current // empty' 2>/dev/null)

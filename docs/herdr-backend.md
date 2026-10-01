@@ -285,11 +285,14 @@ Projected children are placed in one contiguous block immediately after their ow
 - The machine-private per-session lock.
 
 Existing legacy child labels may extend an already adjacent block read-only but are never renamed or migrated.
-A foreign, ambiguous, detached, or manually interleaved child makes ordering skip with a warning rather than rewriting the layout.
+Other home workspaces, human-named workspaces, and detached projection children that live elsewhere in the session never step the move aside: the move only repositions this one new workspace, and `workspace.move` preserves every other workspace's relative order.
 
 Ordering failure never fails the task spawn.
 Firstmate does not retry, adopt, reuse, close, delete, or rename anything in response to an unavailable method, lock contention, ambiguous socket, lost response, failed move, or verification mismatch.
 The worker remains on the ordinary flat or Herdr-current-order path.
+
+Every unavailable, unverifiable, or ambiguous ordering step - an unreadable workspace list, a move primitive that refused or returned an unverifiable response, a protocol below the floor, an ambiguous named-session socket, a move that failed to preserve relative order, or an owning parent that could not be resolved uniquely in the live layout - warns so a captain can address it.
+The parent resolution refuses only when the live layout cannot identify exactly one owning parent, which normally cannot happen because the spawn path pins the parent by the launcher pane's exact workspace id (or by a verified unique home label when the launcher is outside Herdr).
 
 ### Cleanup and focus safety
 
@@ -460,7 +463,7 @@ Any of these preserves the candidate and lets session startup continue with at m
 - Recovery of an existing presentation journal deliberately refuses the spawn when the shared presentation lock is contended, rather than falling back flat.
   Default-on makes that refusal reachable in any Herdr home.
 - Existing layouts are not force-renamed or rearranged.
-- Missing or ambiguous restart bindings fall back to the ordinary home workspace while the old projection remains untouched.
+- Missing or ambiguous restart bindings fall back to the ordinary home workspace while the old projection remains untouched; the matching journal stays at version 1 with a warning so a captain can tell that this task will not reclaim its exact pane on the next Herdr restart.
 - Crashes, lost responses, failed exact-pane cleanup, or human renames can leave quarantined spaces.
   Session start removes only the exact home-local, uniquely journal-correlated, childless idle-shell shape above.
 - Spaces have no cross-home cleanup path, and a secondmate child can clean up only from its exact home.
